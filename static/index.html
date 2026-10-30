@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChaCha20 & Poly1305 — Chat Seguro & Laboratorio Didáctico</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Estilos para barras de scroll estilizadas */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #111827; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    .matrix-cell { font-family: monospace; transition: all 0.2s ease; }
+    .matrix-cell:hover { transform: scale(1.05); }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Header Superior -->
+  <header class="bg-gray-900 border-b border-gray-800 px-4 py-3 sticky top-0 z-40 shadow-lg">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <i class="fa-solid fa-shield-halved text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold bg-gradient-to-r from-blue-400 via-indigo-300 to-teal-300 bg-clip-text text-transparent">
+            ChaCha20 & Poly1305 Chat & Lab
+          </h1>
+          <p class="text-xs text-gray-400 flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Cifrado de Flujo Simétrico (RFC 8439)
+          </p>
+        </div>
+      </div>
+
+      <!-- Barra de Estado / QR Móvil -->
+      <div class="flex items-center space-x-3">
+        <button id="btn-qr-modal" class="px-3 py-1.5 text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg flex items-center gap-2 transition">
+          <i class="fa-solid fa-qrcode text-blue-400"></i>
+          <span>Conectar Celular / Wi-Fi</span>
+        </button>
+        <div class="text-xs bg-gray-800/80 px-3 py-1.5 rounded-lg border border-gray-700 flex items-center gap-2">
+          <i class="fa-solid fa-server text-indigo-400"></i>
+          <span id="header-net-info" class="text-gray-300">Detectando red...</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Pestañas de Navegación -->
+  <nav class="bg-gray-900/50 border-b border-gray-800 px-4">
+    <div class="max-w-7xl mx-auto flex space-x-2 overflow-x-auto py-2">
+      <button onclick="switchTab('chat')" id="tab-btn-chat" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-blue-400 bg-blue-500/10 border border-blue-500/30 flex items-center gap-2 transition">
+        <i class="fa-regular fa-comments"></i>
+        <span>Chat en Tiempo Real & Sniffer</span>
+      </button>
+      <button onclick="switchTab('info')" id="tab-btn-info" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 flex items-center gap-2 transition">
+        <i class="fa-solid fa-book-open"></i>
+        <span>Apartados Informativos (RFC 8439)</span>
+      </button>
+      <button onclick="switchTab('lab')" id="tab-btn-lab" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 flex items-center gap-2 transition">
+        <i class="fa-solid fa-flask"></i>
+        <span>Simulador de Matriz 4x4</span>
+      </button>
+      <button onclick="switchTab('qr-round')" id="tab-btn-qr-round" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 flex items-center gap-2 transition">
+        <i class="fa-solid fa-rotate"></i>
+        <span>Quarter Round (ARX)</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Contenedor Principal -->
+  <main class="max-w-7xl mx-auto p-4 flex-1 w-full">
+
+    <!-- ============================================================ -->
+    <!-- TAB 1: CHAT EN TIEMPO REAL & SNIFFER                         -->
+    <!-- ============================================================ -->
+    <div id="tab-chat" class="space-y-4">
+      <!-- Configuración del Chat: Usuario y Contraseña Compartida -->
+      <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-3 flex-1">
+          <div class="flex items-center gap-2 bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-800">
+            <i class="fa-regular fa-user text-gray-400 text-xs"></i>
+            <span class="text-xs text-gray-400">Usuario:</span>
+            <input type="text" id="chat-user" value="Alice" class="bg-transparent text-sm font-semibold text-blue-400 focus:outline-none w-24">
+          </div>
+          <div class="flex items-center gap-2 bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-800">
+            <i class="fa-solid fa-key text-amber-400 text-xs"></i>
+            <span class="text-xs text-gray-400">Contraseña compartida:</span>
+            <input type="password" id="chat-password" value="redes2026" class="bg-transparent text-sm font-mono text-amber-300 focus:outline-none w-32">
+            <button onclick="togglePasswordVisibility()" class="text-gray-500 hover:text-gray-300 text-xs px-1">
+              <i id="eye-icon" class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-gray-400">PBKDF2-HMAC-SHA256:</span>
+          <span id="key-badge" class="font-mono text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded">
+            256-bit Key Derivada
+          </span>
+        </div>
+      </div>
+
+      <!-- Cuadrícula: Chat a la izquierda, Sniffer de Red (MITM) a la derecha -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Columna de Chat (7 cols) -->
+        <div class="lg:col-span-7 bg-gray-900 border border-gray-800 rounded-xl flex flex-col h-[580px] shadow-sm">
+          <!-- Chat Header -->
+          <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="fa-regular fa-comments text-blue-400"></i>
+              <span class="text-sm font-semibold text-gray-200">Sala ChaCha20-Poly1305</span>
+            </div>
+            <span class="text-xs text-gray-400 bg-gray-800 px-2.5 py-1 rounded-full">
+              Autenticación AEAD Activa
+            </span>
+          </div>
+
+          <!-- Mensajes Scrollables -->
+          <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-3">
+            <div class="text-center py-6 text-gray-500 text-xs">
+              <i class="fa-solid fa-lock text-sm mb-1"></i>
+              <p>Los mensajes se cifran con ChaCha20 antes de enviarse.</p>
+              <p class="text-gray-600">Cada mensaje incluye un Nonce único de 96 bits y un MAC Poly1305.</p>
+            </div>
+          </div>
+
+          <!-- Input de Envío -->
+          <form id="chat-form" class="p-3 border-t border-gray-800 flex items-center gap-2 bg-gray-900/80">
+            <input type="text" id="chat-input" placeholder="Escribe un mensaje seguro..." 
+                   class="flex-1 bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-5 py-2.5 rounded-lg text-sm flex items-center gap-2 transition shadow-md shadow-blue-600/20">
+              <i class="fa-solid fa-paper-plane text-xs"></i>
+              <span>Enviar</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Columna de Sniffer / Man-in-the-Middle (5 cols) -->
+        <div class="lg:col-span-5 bg-gray-900 border border-gray-800 rounded-xl flex flex-col h-[580px] shadow-sm">
+          <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between bg-gray-950/40">
+            <div class="flex items-center gap-2 text-rose-400">
+              <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+              <span class="text-sm font-semibold">Monitor de Red / Sniffer MITM</span>
+            </div>
+            <span class="text-xs bg-rose-950/70 text-rose-400 border border-rose-800/80 px-2 py-0.5 rounded">
+              Tráfico interceptado
+            </span>
+          </div>
+
+          <div class="p-3 bg-gray-950 text-xs text-gray-400 border-b border-gray-800/80">
+            <p>Esto es lo que vería un <strong>hacker</strong> o el <strong>servidor de retransmisión</strong>. Observa que el texto plano nunca viaja por la red:</p>
+          </div>
+
+          <!-- Log de Paquetes en Crudo -->
+          <div id="sniffer-container" class="flex-1 overflow-y-auto p-3 font-mono text-xs space-y-2.5 bg-gray-950/60">
+            <div class="text-gray-600 italic text-center py-8">
+              Esperando paquetes en el canal...
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB 2: APARTADOS INFORMATIVOS (RFC 8439)                     -->
+    <!-- ============================================================ -->
+    <div id="tab-info" class="hidden space-y-4">
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <div class="flex items-center gap-3 mb-6">
+          <div class="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-graduation-cap"></i>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-100">Guía y Fundamentos de ChaCha20</h2>
+            <p class="text-sm text-gray-400">Documentación detallada del algoritmo estandarizado en el RFC 8439</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <!-- Menú Lateral de Temas -->
+          <div class="md:col-span-4 space-y-1.5" id="topics-list">
+            <!-- Cargado dinámicamente -->
+          </div>
+
+          <!-- Contenido del Tema Seleccionado -->
+          <div class="md:col-span-8 bg-gray-950 border border-gray-800 rounded-xl p-6 flex flex-col justify-start min-h-[450px]">
+            <h3 id="topic-title" class="text-lg font-bold text-blue-400 mb-4 pb-2 border-b border-gray-800 flex items-center gap-2">
+              Selecciona un tema
+            </h3>
+            <div id="topic-content" class="text-sm text-gray-300 leading-relaxed font-mono whitespace-pre-line overflow-y-auto max-h-[500px]">
+              Cargando información del RFC 8439...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB 3: SIMULADOR DE MATRIZ 4x4                               -->
+    <!-- ============================================================ -->
+    <div id="tab-lab" class="hidden space-y-4">
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <h2 class="text-xl font-bold text-gray-100 mb-2 flex items-center gap-2">
+          <i class="fa-solid fa-microchip text-indigo-400"></i>
+          Simulador Interactivo de la Matriz de Estado 4x4
+        </h2>
+        <p class="text-sm text-gray-400 mb-6">
+          ChaCha20 organiza 512 bits (16 palabras de 32 bits) en una matriz 4x4. Prueba con tus propios datos y observa la transformación completa.
+        </p>
+
+        <!-- Formulario de Prueba -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 mb-1">Texto a Cifrar:</label>
+            <input type="text" id="lab-text" value="¡Hola, Redes y ChaCha20!" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 mb-1">Contraseña:</label>
+            <input type="text" id="lab-pass" value="claveSecreta2026" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-amber-300 font-mono focus:outline-none focus:border-indigo-500">
+          </div>
+          <div class="flex items-end">
+            <button onclick="runLabSimulation()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-4 rounded-lg text-sm flex items-center justify-center gap-2 transition shadow-md shadow-indigo-600/20">
+              <i class="fa-solid fa-play text-xs"></i>
+              <span>Calcular 20 Rondas y Cifrar</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Visualizador de Matrices -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- 1. Matriz Inicial -->
+          <div class="bg-gray-950 border border-gray-800 rounded-xl p-4">
+            <div class="text-xs font-semibold text-blue-400 mb-1 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+              1. Estado Inicial (Input)
+            </div>
+            <p class="text-[11px] text-gray-500 mb-3">Constantes + Clave + Cont. + Nonce</p>
+            <div id="matrix-initial" class="grid grid-cols-4 gap-1.5 text-center text-xs">
+              <!-- Celdas 4x4 -->
+            </div>
+          </div>
+
+          <!-- 2. Matriz tras 20 Rondas -->
+          <div class="bg-gray-950 border border-gray-800 rounded-xl p-4">
+            <div class="text-xs font-semibold text-amber-400 mb-1 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+              2. Tras 20 Rondas ARX
+            </div>
+            <p class="text-[11px] text-gray-500 mb-3">10 rondas col + 10 diag</p>
+            <div id="matrix-rounds" class="grid grid-cols-4 gap-1.5 text-center text-xs">
+              <!-- Celdas 4x4 -->
+            </div>
+          </div>
+
+          <!-- 3. Matriz Final y Keystream -->
+          <div class="bg-gray-950 border border-gray-800 rounded-xl p-4">
+            <div class="text-xs font-semibold text-emerald-400 mb-1 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              3. Salida Final (Suma Modular)
+            </div>
+            <p class="text-[11px] text-gray-500 mb-3">(Estado Mezclado + Inicial) mod 2³²</p>
+            <div id="matrix-final" class="grid grid-cols-4 gap-1.5 text-center text-xs">
+              <!-- Celdas 4x4 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Leyenda de Colores de la Matriz -->
+        <div class="mt-4 pt-4 border-t border-gray-800 flex flex-wrap items-center gap-4 text-xs text-gray-400">
+          <span class="font-semibold text-gray-300">Distribución de la Matriz:</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-blue-500/20 border border-blue-500/50"></span> Fila 0: Constantes "expand 32-byte k"</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500/50"></span> Filas 1-2: Clave (256 bits)</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-500/20 border border-amber-500/50"></span> Fila 3, Col 0: Contador de bloque</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-purple-500/20 border border-purple-500/50"></span> Fila 3, Cols 1-3: Nonce (96 bits)</span>
+        </div>
+
+        <!-- Salida Criptográfica -->
+        <div id="lab-output" class="mt-6 bg-gray-950 border border-gray-800 rounded-xl p-4 font-mono text-xs space-y-2 hidden">
+          <div class="font-bold text-gray-200 mb-2 border-b border-gray-800 pb-1">Operación de Cifrado (XOR Keystream):</div>
+          <div class="text-gray-400">Texto plano (Hex): <span id="lab-plain-hex" class="text-blue-300"></span></div>
+          <div class="text-gray-400">Keystream (Hex)  : <span id="lab-ks-hex" class="text-emerald-300"></span></div>
+          <div class="text-gray-400">Cifrado (C = P⊕K): <span id="lab-cipher-hex" class="text-amber-300 font-bold"></span></div>
+          <div class="text-gray-400">Tag Poly1305 MAC : <span id="lab-tag-hex" class="text-purple-300"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB 4: QUARTER ROUND (ARX)                                   -->
+    <!-- ============================================================ -->
+    <div id="tab-qr-round" class="hidden space-y-4">
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+        <h2 class="text-xl font-bold text-gray-100 mb-2 flex items-center gap-2">
+          <i class="fa-solid fa-rotate text-teal-400"></i>
+          El Quarter Round (Operaciones ARX)
+        </h2>
+        <p class="text-sm text-gray-400 mb-4">
+          La unidad mínima de mezcla en ChaCha20 opera sobre 4 palabras de 32 bits usando solo tres operaciones atómicas:
+          <strong class="text-gray-200">Adición modular (+)</strong>, <strong class="text-gray-200">Rotación izquierda (<<<)</strong> y <strong class="text-gray-200">XOR (⊕)</strong>.
+        </p>
+
+        <div class="bg-gray-950 border border-gray-800 rounded-xl p-5 font-mono text-xs text-gray-300 whitespace-pre overflow-x-auto" id="qr-content">
+          Cargando vector de prueba del RFC 8439...
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Modal para Conectar Celular / Ver QR -->
+  <div id="qr-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 text-center shadow-2xl relative">
+      <button onclick="closeQrModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-200 text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto mb-3 text-xl">
+        <i class="fa-solid fa-mobile-screen-button"></i>
+      </div>
+
+      <h3 class="text-lg font-bold text-gray-100 mb-1">Conecta tu Celular al Chat</h3>
+      <p class="text-xs text-gray-400 mb-4">
+        Asegúrate de estar conectado a la misma red Wi-Fi y escanea este código con tu cámara:
+      </p>
+
+      <!-- Contenedor del SVG del QR -->
+      <div id="qr-svg-container" class="bg-white p-4 rounded-xl inline-block shadow-lg mx-auto mb-4 w-56 h-56 flex items-center justify-center">
+        <!-- SVG insertado por JS -->
+      </div>
+
+      <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 text-left">
+        <span class="text-[11px] text-gray-500 block mb-1">O escribe esta dirección en tu navegador:</span>
+        <div class="flex items-center justify-between">
+          <span id="qr-url-text" class="text-sm font-mono text-blue-400 select-all font-semibold">http://...</span>
+          <button onclick="copyNetworkUrl()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded transition">
+            Copiar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Detallado de Inspección Criptográfica de Mensaje -->
+  <div id="crypto-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+      <button onclick="closeCryptoModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-200 text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <h3 class="text-lg font-bold text-gray-100 mb-1 flex items-center gap-2">
+        <i class="fa-solid fa-microscope text-blue-400"></i>
+        Desglose Criptográfico del Mensaje
+      </h3>
+      <p class="text-xs text-gray-400 mb-4">Estructura del frame autenticado ChaCha20-Poly1305 (RFC 8439)</p>
+
+      <div class="overflow-y-auto space-y-3 font-mono text-xs pr-1">
+        <div class="bg-gray-950 border border-gray-800 p-3 rounded-lg">
+          <span class="text-gray-500 block text-[11px] font-sans">1. Texto en Claro:</span>
+          <span id="m-plaintext" class="text-gray-200 text-sm font-sans font-medium"></span>
+        </div>
+
+        <div class="bg-gray-950 border border-gray-800 p-3 rounded-lg">
+          <span class="text-purple-400 block text-[11px] font-sans font-semibold">2. Nonce Aleatorio (96 bits / 12 bytes):</span>
+          <span id="m-nonce" class="text-purple-300 break-all"></span>
+        </div>
+
+        <div class="bg-gray-950 border border-gray-800 p-3 rounded-lg">
+          <span class="text-emerald-400 block text-[11px] font-sans font-semibold">3. Clave Derivada (PBKDF2 256 bits / 32 bytes):</span>
+          <span id="m-key" class="text-emerald-300 break-all"></span>
+        </div>
+
+        <div class="bg-gray-950 border border-gray-800 p-3 rounded-lg">
+          <span class="text-amber-400 block text-[11px] font-sans font-semibold">4. Texto Cifrado ChaCha20 (Bytes Hex):</span>
+          <span id="m-cipher" class="text-amber-300 break-all"></span>
+        </div>
+
+        <div class="bg-gray-950 border border-gray-800 p-3 rounded-lg">
+          <span class="text-teal-400 block text-[11px] font-sans font-semibold">5. Tag de Autenticación Poly1305 MAC (128 bits / 16 bytes):</span>
+          <span id="m-tag" class="text-teal-300 break-all"></span>
+        </div>
+
+        <div class="bg-gray-950 border border-gray-800 p-3 rounded-lg">
+          <span class="text-blue-400 block text-[11px] font-sans font-semibold">6. Paquete Final de Red (Frame Completo):</span>
+          <div class="text-gray-400 text-[11px] mb-1">[Nonce: 12B] + [Ciphertext: NB] + [Tag: 16B]</div>
+          <span id="m-frame" class="text-blue-300 break-all text-[11px]"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lógica JavaScript del Cliente -->
+  <script>
+    // Variables de Estado
+    let ws = null;
+    let currentTopics = [];
+    let networkInfo = null;
+
+    // Inicialización
+    window.addEventListener('DOMContentLoaded', () => {
+      initWebSocket();
+      fetchTopics();
+      fetchQuarterRound();
+      fetchNetworkInfo();
+      runLabSimulation(); // Simulación inicial de matriz
+    });
+
+    // -------------------------------------------------------------
+    // Conexión WebSocket para Chat en Tiempo Real
+    // -------------------------------------------------------------
+    function initWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('Conectado a WebSocket ChaCha20');
+      };
+
+      ws.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'chat_message') {
+          handleIncomingMessage(msg.payload);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket cerrado. Reconectando en 3s...');
+        setTimeout(initWebSocket, 3000);
+      };
+    }
+
+    // Manejar envío de mensaje
+    document.getElementById('chat-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      const user = document.getElementById('chat-user').value.trim() || 'Anónimo';
+      const password = document.getElementById('chat-password').value || 'redes2026';
+
+      if (!text) return;
+
+      try {
+        // Cifrar el mensaje con ChaCha20-Poly1305 en el backend
+        const res = await fetch('/api/encrypt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, password, user })
+        });
+        const encryptedData = await res.json();
+
+        // Enviar por WebSocket a todos los usuarios
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(encryptedData));
+        }
+
+        input.value = '';
+      } catch (err) {
+        alert('Error al cifrar el mensaje: ' + err.message);
+      }
+    });
+
+    // Manejar recepción de mensaje
+    async function handleIncomingMessage(msgData) {
+      // 1. Añadir al Monitor Sniffer MITM
+      addSnifferLog(msgData);
+
+      // 2. Intentar descifrar el mensaje con nuestra contraseña local
+      const myPassword = document.getElementById('chat-password').value;
+      const res = await fetch('/api/decrypt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frame_hex: msgData.frame_hex,
+          password: myPassword
+        })
+      });
+      const decResult = await res.json();
+
+      // Renderizar en el historial de chat
+      renderChatMessage(msgData, decResult);
+    }
+
+    // Renderizar tarjeta de mensaje en el chat
+    function renderChatMessage(msgData, decResult) {
+      const container = document.getElementById('messages-container');
+      const isMe = msgData.user === document.getElementById('chat-user').value.trim();
+
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`;
+
+      let contentHtml = '';
+      if (decResult.success) {
+        contentHtml = `
+          <div class="max-w-[85%] rounded-2xl p-3.5 shadow-md ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-100 rounded-bl-none'}">
+            <div class="flex items-center justify-between gap-3 text-[11px] opacity-80 mb-1">
+              <span class="font-bold">${escapeHtml(msgData.user)}</span>
+              <span>${msgData.time}</span>
+            </div>
+            <p class="text-sm font-sans break-words">${escapeHtml(decResult.data.text)}</p>
+            <div class="mt-2 pt-2 border-t border-white/10 flex items-center justify-between text-[11px]">
+              <span class="text-emerald-300 font-mono flex items-center gap-1">
+                <i class="fa-solid fa-circle-check text-[10px]"></i> Poly1305 OK
+              </span>
+              <button onclick="openCryptoModal('${encodeURIComponent(JSON.stringify(msgData))}')" class="underline hover:opacity-100 opacity-80 transition">
+                <i class="fa-solid fa-microscope text-[10px]"></i> Ver Cripto
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        // Fallo de contraseña o mensaje no autenticable
+        contentHtml = `
+          <div class="max-w-[85%] bg-rose-950/60 border border-rose-800/80 rounded-2xl rounded-bl-none p-3.5 text-rose-200 shadow-md">
+            <div class="flex items-center justify-between gap-3 text-[11px] mb-1">
+              <span class="font-bold text-rose-400">${escapeHtml(msgData.user)}</span>
+              <span class="text-rose-400/80">${msgData.time}</span>
+            </div>
+            <p class="text-xs font-mono break-all">[!] Mensaje indescifrable: Contraseña incorrecta o paquete alterado.</p>
+            <div class="mt-2 pt-2 border-t border-rose-900/60 flex items-center justify-between text-[11px]">
+              <span class="text-rose-400 font-mono">Poly1305 Rechazado</span>
+              <button onclick="openCryptoModal('${encodeURIComponent(JSON.stringify(msgData))}')" class="underline text-rose-300 hover:text-white">
+                <i class="fa-solid fa-microscope text-[10px]"></i> Inspeccionar
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      msgDiv.innerHTML = contentHtml;
+      container.appendChild(msgDiv);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Registrar en el monitor Sniffer MITM
+    function addSnifferLog(msgData) {
+      const sniffer = document.getElementById('sniffer-container');
+      const item = document.createElement('div');
+      item.className = 'bg-gray-900 p-2.5 rounded border border-gray-800/80 space-y-1 hover:border-gray-700 transition';
+
+      const shortFrame = msgData.frame_hex.length > 50 ? msgData.frame_hex.substring(0, 50) + '...' : msgData.frame_hex;
+
+      item.innerHTML = `
+        <div class="flex items-center justify-between text-[10px] text-gray-500">
+          <span class="text-rose-400 font-bold"><i class="fa-solid fa-network-wired"></i> PAQUETE RECEPTOR [${msgData.total_bytes} bytes]</span>
+          <span>${msgData.time}</span>
+        </div>
+        <div class="text-gray-300 break-all text-[11px] leading-tight font-mono">
+          <span class="text-purple-400">[Nonce: ${msgData.nonce_hex}]</span>
+          <span class="text-amber-300">[Cifrado: ${msgData.ciphertext_hex.substring(0, 20)}...]</span>
+          <span class="text-teal-400">[Tag: ${msgData.tag_hex.substring(0, 10)}...]</span>
+        </div>
+      `;
+
+      sniffer.insertBefore(item, sniffer.firstChild);
+    }
+
+    // -------------------------------------------------------------
+    // Navegación de Pestañas
+    // -------------------------------------------------------------
+    function switchTab(tabId) {
+      const tabs = ['chat', 'info', 'lab', 'qr-round'];
+      tabs.forEach(t => {
+        document.getElementById(`tab-${t}`).classList.add('hidden');
+        const btn = document.getElementById(`tab-btn-${t}`);
+        btn.className = 'tab-btn px-4 py-2 text-sm font-medium rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 flex items-center gap-2 transition';
+      });
+
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      activeBtn.className = 'tab-btn px-4 py-2 text-sm font-medium rounded-lg text-blue-400 bg-blue-500/10 border border-blue-500/30 flex items-center gap-2 transition';
+    }
+
+    // -------------------------------------------------------------
+    // Apartados Informativos (RFC 8439)
+    // -------------------------------------------------------------
+    async function fetchTopics() {
+      try {
+        const res = await fetch('/api/topics');
+        currentTopics = await res.json();
+
+        const listContainer = document.getElementById('topics-list');
+        listContainer.innerHTML = '';
+
+        currentTopics.forEach((t, idx) => {
+          const btn = document.createElement('button');
+          btn.className = `w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium flex items-center justify-between transition ${idx === 0 ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 font-semibold' : 'text-gray-400 hover:bg-gray-800/80 hover:text-gray-200'}`;
+          btn.innerHTML = `<span>${t.id}. ${escapeHtml(t.title)}</span> <i class="fa-solid fa-chevron-right text-[10px] opacity-60"></i>`;
+          btn.onclick = () => selectTopic(idx, btn);
+          listContainer.appendChild(btn);
+        });
+
+        if (currentTopics.length > 0) {
+          showTopicDetails(0);
+        }
+      } catch (err) {
+        console.error('Error cargando apartados:', err);
+      }
+    }
+
+    function selectTopic(index, activeBtn) {
+      const buttons = document.querySelectorAll('#topics-list button');
+      buttons.forEach(b => {
+        b.className = 'w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium flex items-center justify-between text-gray-400 hover:bg-gray-800/80 hover:text-gray-200 transition';
+      });
+      activeBtn.className = 'w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between bg-blue-600/20 text-blue-400 border border-blue-500/30 transition';
+      showTopicDetails(index);
+    }
+
+    function showTopicDetails(index) {
+      const t = currentTopics[index];
+      document.getElementById('topic-title').innerHTML = `<i class="fa-solid fa-book-bookmark text-blue-400"></i> ${t.id}. ${escapeHtml(t.title)}`;
+      document.getElementById('topic-content').textContent = t.content;
+    }
+
+    // -------------------------------------------------------------
+    // Simulador de Matriz 4x4
+    // -------------------------------------------------------------
+    async function runLabSimulation() {
+      const text = document.getElementById('lab-text').value || 'Prueba';
+      const password = document.getElementById('lab-pass').value || 'demo123';
+
+      try {
+        const res = await fetch('/api/encrypt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, password, user: 'Simulador' })
+        });
+        const data = await res.json();
+
+        renderMatrix('matrix-initial', data.matrix_initial);
+        renderMatrix('matrix-rounds', data.matrix_rounds);
+        renderMatrix('matrix-final', data.matrix_final);
+
+        // Desglose de salida
+        const labOut = document.getElementById('lab-output');
+        labOut.classList.remove('hidden');
+        document.getElementById('lab-plain-hex').textContent = stringToHex(text);
+        document.getElementById('lab-ks-hex').textContent = data.keystream_block_hex;
+        document.getElementById('lab-cipher-hex').textContent = data.ciphertext_hex;
+        document.getElementById('lab-tag-hex').textContent = data.tag_hex;
+      } catch (err) {
+        console.error('Error en simulación:', err);
+      }
+    }
+
+    function renderMatrix(containerId, matrix) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          const val = matrix[r][c];
+          const cell = document.createElement('div');
+          
+          // Asignar color según sección de la matriz
+          let colorClass = 'bg-gray-900 border-gray-800 text-gray-300';
+          if (r === 0) {
+            colorClass = 'bg-blue-950/60 border-blue-800/80 text-blue-300'; // Constantes
+          } else if (r === 1 || r === 2) {
+            colorClass = 'bg-emerald-950/60 border-emerald-800/80 text-emerald-300'; // Clave
+          } else if (r === 3 && c === 0) {
+            colorClass = 'bg-amber-950/60 border-amber-800/80 text-amber-300'; // Contador
+          } else {
+            colorClass = 'bg-purple-950/60 border-purple-800/80 text-purple-300'; // Nonce
+          }
+
+          cell.className = `matrix-cell p-2 rounded border font-mono text-[11px] ${colorClass}`;
+          cell.textContent = val;
+          container.appendChild(cell);
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Quarter Round
+    // -------------------------------------------------------------
+    async function fetchQuarterRound() {
+      try {
+        const res = await fetch('/api/quarter_round');
+        const data = await res.json();
+        document.getElementById('qr-content').textContent = data.explanation;
+      } catch (err) {
+        console.error('Error cargando QR:', err);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Red y QR Móvil
+    // -------------------------------------------------------------
+    async function fetchNetworkInfo() {
+      try {
+        const res = await fetch('/api/network_info');
+        networkInfo = await res.json();
+        document.getElementById('header-net-info').textContent = `Wi-Fi: ${networkInfo.local_ip}:${networkInfo.port}`;
+        document.getElementById('qr-url-text').textContent = networkInfo.url;
+        document.getElementById('qr-svg-container').innerHTML = networkInfo.qr_svg;
+      } catch (err) {
+        console.error('Error cargando info de red:', err);
+      }
+    }
+
+    document.getElementById('btn-qr-modal').onclick = () => {
+      document.getElementById('qr-modal').classList.remove('hidden');
+    };
+
+    function closeQrModal() {
+      document.getElementById('qr-modal').classList.add('hidden');
+    }
+
+    function copyNetworkUrl() {
+      if (networkInfo && networkInfo.url) {
+        navigator.clipboard.writeText(networkInfo.url);
+        alert('Enlace copiado al portapapeles: ' + networkInfo.url);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Modal de Cripto
+    // -------------------------------------------------------------
+    function openCryptoModal(encodedData) {
+      const data = JSON.parse(decodeURIComponent(encodedData));
+      document.getElementById('m-plaintext').textContent = data.plaintext;
+      document.getElementById('m-nonce').textContent = data.nonce_hex;
+      document.getElementById('m-key').textContent = data.key_hex;
+      document.getElementById('m-cipher').textContent = data.ciphertext_hex;
+      document.getElementById('m-tag').textContent = data.tag_hex;
+      document.getElementById('m-frame').textContent = data.frame_hex;
+
+      document.getElementById('crypto-modal').classList.remove('hidden');
+    }
+
+    function closeCryptoModal() {
+      document.getElementById('crypto-modal').classList.add('hidden');
+    }
+
+    function togglePasswordVisibility() {
+      const pass = document.getElementById('chat-password');
+      const icon = document.getElementById('eye-icon');
+      if (pass.type === 'password') {
+        pass.type = 'text';
+        icon.className = 'fa-regular fa-eye-slash';
+      } else {
+        pass.type = 'password';
+        icon.className = 'fa-regular fa-eye';
+      }
+    }
+
+    function stringToHex(str) {
+      return Array.from(new TextEncoder().encode(str))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
